@@ -6,22 +6,176 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
+      - name: Build
         run: docker compose build
 
-      - name: Run tests
+      - name: Test
         run: |
-          docker compose run --rm app python -c "import fastapi; print('OK')"
+          docker compose run --rm app sh -c "
+            # Go
+            if [ -f 'go.mod' ]; then
+              echo 'Detected: Go'
+              go test ./...
+
+            # Python
+            elif [ -f 'pytest.ini' ] || [ -f 'pyproject.toml' ] || [ -f 'setup.py' ] || [ -d 'tests' ]; then
+              echo 'Detected: Python'
+              python -m pytest || python -m unittest discover
+
+            # Node.js / Bun
+            elif [ -f 'package.json' ]; then
+              if [ -f 'bun.lockb' ]; then
+                echo 'Detected: Bun'
+                bun test
+              elif [ -f 'pnpm-lock.yaml' ]; then
+                echo 'Detected: pnpm'
+                pnpm test
+              elif [ -f 'yarn.lock' ]; then
+                echo 'Detected: Yarn'
+                yarn test
+              else
+                echo 'Detected: npm'
+                npm test
+              fi
+
+            # Ruby
+            elif [ -f 'Gemfile' ]; then
+              echo 'Detected: Ruby'
+              bundle exec rspec || bundle exec rake test
+
+            # Rust
+            elif [ -f 'Cargo.toml' ]; then
+              echo 'Detected: Rust'
+              cargo test
+
+            # Java (Maven)
+            elif [ -f 'pom.xml' ]; then
+              echo 'Detected: Java Maven'
+              mvn test
+
+            # Java (Gradle)
+            elif [ -f 'build.gradle' ] || [ -f 'build.gradle.kts' ]; then
+              echo 'Detected: Java Gradle'
+              ./gradlew test
+
+            # PHP
+            elif [ -f 'composer.json' ]; then
+              echo 'Detected: PHP'
+              ./vendor/bin/phpunit || composer test
+
+            # Elixir
+            elif [ -f 'mix.exs' ]; then
+              echo 'Detected: Elixir'
+              mix test
+
+            # Dart / Flutter
+            elif [ -f 'pubspec.yaml' ]; then
+              echo 'Detected: Dart'
+              dart test || flutter test
+
+            # .NET / C#
+            elif [ -f '*.csproj' ] || [ -f '*.sln' ]; then
+              echo 'Detected: .NET'
+              dotnet test
+
+            # Swift
+            elif [ -f 'Package.swift' ]; then
+              echo 'Detected: Swift'
+              swift test
+
+            # Kotlin
+            elif [ -f 'build.gradle.kts' ]; then
+              echo 'Detected: Kotlin'
+              ./gradlew test
+
+            # Haskell
+            elif [ -f 'stack.yaml' ]; then
+              echo 'Detected: Haskell Stack'
+              stack test
+            elif [ -f '*.cabal' ]; then
+              echo 'Detected: Haskell Cabal'
+              cabal test
+
+            # Scala
+            elif [ -f 'build.sbt' ]; then
+              echo 'Detected: Scala'
+              sbt test
+
+            # Clojure
+            elif [ -f 'project.clj' ]; then
+              echo 'Detected: Clojure'
+              lein test
+            elif [ -f 'deps.edn' ]; then
+              echo 'Detected: Clojure CLI'
+              clojure -M:test
+
+            # Lua
+            elif [ -f '*.rockspec' ]; then
+              echo 'Detected: Lua'
+              busted
+
+            # Perl
+            elif [ -f 'Makefile.PL' ] || [ -f 'Build.PL' ]; then
+              echo 'Detected: Perl'
+              prove -r t/
+
+            # R
+            elif [ -f 'DESCRIPTION' ]; then
+              echo 'Detected: R'
+              Rscript -e 'devtools::test()'
+
+            # Julia
+            elif [ -f 'Project.toml' ] && grep -q 'julia' Project.toml 2>/dev/null; then
+              echo 'Detected: Julia'
+              julia --project=. -e 'using Pkg; Pkg.test()'
+
+            # Nim
+            elif [ -f '*.nimble' ]; then
+              echo 'Detected: Nim'
+              nimble test
+
+            # Crystal
+            elif [ -f 'shard.yml' ]; then
+              echo 'Detected: Crystal'
+              crystal spec
+
+            # Zig
+            elif [ -f 'build.zig' ]; then
+              echo 'Detected: Zig'
+              zig build test
+
+            # OCaml
+            elif [ -f 'dune-project' ]; then
+              echo 'Detected: OCaml'
+              dune runtest
+
+            # F#
+            elif [ -f '*.fsproj' ]; then
+              echo 'Detected: F#'
+              dotnet test
+
+            # Erlang
+            elif [ -f 'rebar.config' ]; then
+              echo 'Detected: Erlang'
+              rebar3 eunit
+
+            # D
+            elif [ -f 'dub.json' ] || [ -f 'dub.sdl' ]; then
+              echo 'Detected: D'
+              dub test
+
+            # 沒有偵測到任何語言
+            else
+              echo 'No test framework detected, skipping'
+              exit 0
+            fi
+          "
 
   build-and-deploy:
     needs: test
@@ -51,7 +205,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /root/projects/test-cicd
+            cd /root/projects/${{ github.event.repository.name }}
             docker compose pull
             docker compose up -d
             docker image prune -f
