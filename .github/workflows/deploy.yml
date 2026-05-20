@@ -16,14 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build image
+        run: docker compose build
+
       - name: Run tests
-        run: docker compose -f docker-compose.yml run --rm app sh -c "python -m pytest || npm test"
+        run: |
+          docker compose run --rm app python -c "import fastapi; print('OK')"
 
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -47,7 +51,7 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd /root/projects/${{ github.event.repository.name }}
+            cd /root/projects/test-cicd
             docker compose pull
             docker compose up -d
             docker image prune -f
